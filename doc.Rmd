@@ -1,0 +1,237 @@
+---
+title: "MSFT Stock and NASDAQ Composite Index Analysis"
+author: "Spyridoula Ira Karniak "
+date: "2024-07-06"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: no
+  html_document:
+    df_print: paged
+  word_document: default
+header-includes:
+- \usepackage{fontspec}
+- \usepackage{polyglossia}
+- \setdefaultlanguage{greek}
+- \setotherlanguage{english}
+- \newfontfamily\greekfont{Times New Roman}
+- \newfontfamily\greekfontsf{Times New Roman}
+- \newfontfamily\greekfonttt{Times New Roman}
+---
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = FALSE, highlight = TRUE, message = FALSE, warning = FALSE)
+
+# Check and install necessary packages
+packages <- c("quantmod", "TTR", "PerformanceAnalytics", "ggplot2")
+install_if_missing <- function(p) {
+  if (!requireNamespace(p, quietly = TRUE)) {
+    install.packages(p)
+  }
+}
+invisible(lapply(packages, install_if_missing))
+```
+
+```{r, include=FALSE}
+# Install and load necessary libraries
+if (!require("quantmod")) install.packages("quantmod")
+if (!require("PerformanceAnalytics")) install.packages("PerformanceAnalytics")
+if (!require("TTR")) install.packages("TTR")
+
+library(quantmod)
+library(PerformanceAnalytics)
+library(TTR)
+```
+
+## Introduction
+
+In this analysis, we will examine Microsoft's (MSFT) stock and the NASDAQ Composite index (IXIC). We will convert price data into daily returns, perform linear regressions on minimum, maximum, and closing prices, and calculate beta coefficients and confidence intervals.
+
+## Analysis Steps
+
+### 1. Data Retrieval
+
+First, we will download the data for MSFT stock and the IXIC index using the `quantmod` library.
+
+```{r data-download}
+# Download data for MSFT and IXIC from Yahoo Finance
+getSymbols(c("MSFT", "^IXIC"), src = "yahoo", from = "2023-01-01", to = "2023-12-31")
+
+# Display the first rows of the data for verification
+head(MSFT)
+head(IXIC)
+```
+
+### 2. Convert Data to Returns
+
+We will convert closing, minimum, and maximum prices into daily returns.
+
+```{r calculate-returns}
+# Convert data to returns
+returns_MSFT <- data.frame(
+  Date = index(MSFT),
+  MSFT.Low = ROC(Lo(MSFT), type = "discrete"),
+  MSFT.High = ROC(Hi(MSFT), type = "discrete"),
+  MSFT.Close = ROC(Cl(MSFT), type = "discrete")
+)
+
+# Calculate returns for the index
+returns_IXIC <- data.frame(
+  Date = index(IXIC),
+  IXIC.Close = ROC(Cl(IXIC), type = "discrete")
+)
+
+# Remove NA values
+returns_MSFT <- na.omit(returns_MSFT)
+returns_IXIC <- na.omit(returns_IXIC)
+
+# Synchronize dates
+merged_data <- merge(returns_MSFT, returns_IXIC, by = "Date")
+
+# Remove infinite and non-numeric values
+merged_data <- merged_data[is.finite(rowSums(merged_data[, -1])), ]
+
+# Display the first rows of the returns
+head(merged_data)
+```
+
+### 3. Linear Regressions
+
+Perform linear regressions and calculate beta coefficients and confidence intervals.
+
+```{r linear-regressions}
+# Regression with Minimum Prices
+lm_low <- lm(MSFT.Low ~ IXIC.Close, data = merged_data)
+
+# Regression with Maximum Prices
+lm_high <- lm(MSFT.High ~ IXIC.Close, data = merged_data)
+
+# Regression with Closing Prices
+lm_close <- lm(MSFT.Close ~ IXIC.Close, data = merged_data)
+
+# Calculate beta coefficients and confidence intervals
+beta_low <- coef(lm_low)[2]
+beta_high <- coef(lm_high)[2]
+beta_close <- coef(lm_close)[2]
+
+confint_low <- confint(lm_low, level = 0.95)[2,]
+confint_high <- confint(lm_high, level = 0.95)[2,]
+confint_close <- confint(lm_close, level = 0.95)[2,]
+
+list(
+  beta_low = beta_low,
+  confint_low = confint_low,
+  beta_high = beta_high,
+  confint_high = confint_high,
+  beta_close = beta_close,
+  confint_close = confint_close
+)
+```
+
+### 4. Results
+
+```{r findings , echo=FALSE}
+cat("Beta Coefficients and Confidence Intervals:\n")
+cat("Minimum Prices: Beta =", beta_low, ", 95% CI =", confint_low, "\n")
+cat("Maximum Prices: Beta =", beta_high, ", 95% CI =", confint_high, "\n")
+cat("Closing Prices: Beta =", beta_close, ", 95% CI =", confint_close, "\n")
+
+# Commentary
+cat("\nComments:\n")
+
+cat("The regression of minimum prices shows that the beta coefficient is", beta_low, 
+    "with a confidence interval", confint_low, ". This means that the minimum daily prices 
+    of MSFT stock have a beta coefficient of 0.6169899 relative to the IXIC index. Since the beta 
+    coefficient is less than 1, this indicates that the minimum price of the stock is less 
+    sensitive to fluctuations in the overall index. Therefore, the stock has lower risk 
+    relative to the market as a whole when considering minimum prices.")
+
+cat("The regression of maximum prices shows that the beta coefficient is", beta_high, 
+    "with a confidence interval", confint_high, ". The beta coefficient for maximum prices 
+    is also less than 1, indicating that the maximum prices of MSFT stock react less 
+    sensitively to changes in the IXIC index. This also indicates lower risk when considering 
+    maximum prices relative to the market.")
+
+cat("The regression of closing prices shows that the beta coefficient is", beta_close, 
+    "with a confidence interval", confint_close, ". The beta coefficient for closing prices 
+    is slightly above 1, indicating that the closing price of MSFT stock has slightly greater 
+    sensitivity relative to fluctuations in the IXIC index. This means that the MSFT stock 
+    may be more profitable for investment but presents higher risk, given that it moves 
+    more closely with the overall market.")
+```
+
+### 5. Graphs
+
+Create scatter plots for returns.
+
+```{r scatter-plots, warning=FALSE}
+# Scatter plots for returns
+par(mfrow = c(3, 1)) # Set plots in 3 rows
+
+# Scatter plot for minimum values
+plot(merged_data$IXIC.Close, merged_data$MSFT.Low, 
+     main = "Scatter Plot for Minimum Values",
+     xlab = "IXIC Returns", 
+     ylab = "MSFT Minimum Returns", pch = 19, col = "blue")
+abline(lm_low, col = "red")
+
+# Scatter plot for maximum values
+plot(merged_data$IXIC.Close, merged_data$MSFT.High, 
+     main = "Scatter Plot for Maximum Values",
+     xlab = "IXIC Returns", 
+     ylab = "MSFT Maximum Returns", pch = 19, col = "blue")
+abline(lm_high, col = "red")
+
+# Scatter plot for closing prices
+plot(merged_data$IXIC.Close, merged_data$MSFT.Close, 
+     main = "Scatter Plot for Closing Prices",
+     xlab = "IXIC Returns", 
+     ylab = "MSFT Closing Returns", pch = 19, col = "blue")
+abline(lm_close, col = "red")
+
+# Reset the plot layout to single row
+par(mfrow = c(1, 1))
+```
+
+```{r, warning=FALSE}
+# Change locale to English
+invisible(Sys.setlocale("LC_TIME", "C"))
+msft_returns_xts <- xts(merged_data[, c("MSFT.Low", "MSFT.High", "MSFT.Close")], 
+                        order.by = merged_data$Date)
+nasdaq_returns_xts <- xts(merged_data$IXIC.Close, order.by = merged_data$Date)
+
+# Create return charts
+charts.PerformanceSummary(msft_returns_xts, 
+                          main = "Microsoft Stock Returns")
+charts.PerformanceSummary(nasdaq_returns_xts, 
+                          main = "Nasdaq Composite Index Returns")
+
+# Reset locale to original if necessary
+invisible(Sys.setlocale("LC_TIME", "el_GR.UTF-8"))
+```
+
+### Analysis of Charts
+
+1. **Scatter Plot for Minimum Prices**: This chart shows the daily change (return) of MSFT's minimum prices compared to the daily change of the Nasdaq Composite Index (IXIC). MSFT's prices show significant volatility. Its performance fluctuates around zero, indicating that the minimum prices of the stock did not have a clear upward or downward trend but experienced days with large fluctuations.
+
+2. **Scatter Plot for Maximum Prices**: This chart shows the daily change (return) of MSFT's maximum prices compared to the daily change of IXIC. Like the previous chart, MSFT's maximum prices also show volatility around zero, indicating that the maximum prices of the stock also had fluctuations without a clear long-term trend.
+
+3. Scatter Plot for Closing Prices:
+
+This plot shows the daily change (return) of MSFT's closing prices compared to the daily change of the IXIC index. The returns of MSFT's closing prices exhibit a similar pattern to the previous plots, with significant volatility around zero.
+
+Conclusions
+
+
+Minimum Prices:
+The beta coefficient for the minimum prices of MSFT (0.617) indicates that the stock is less sensitive to changes in the IXIC index. This means that when the NASDAQ Composite index increases or decreases by 1%, the minimum price of MSFT changes by approximately 0.617%.
+
+Maximum Prices:
+The beta coefficient for the maximum prices of MSFT (0.552) also suggests low sensitivity to the index. This indicates that the maximum price of MSFT has less volatility compared to the performance of the IXIC index.
+
+Closing Prices:
+The beta coefficient for MSFT's closing prices (1.039) shows that Microsoft's stock is almost as sensitive as the NASDAQ Composite index. That is, when the index changes by 1%, MSFT's closing price tends to change by about 1.039%, indicating a high correlation with the index's performance.
+
+
+The minimum and maximum prices of MSFT show low sensitivity to changes in the IXIC index, suggesting that the stock's extreme prices are not heavily influenced by overall market trends. The closing prices of MSFT, however, show a higher correlation with changes in the IXIC index, indicating that the overall performance of the stock is more sensitive to general market trends. According to portfolio theory, Microsoft’s stock exhibits different levels of risk and return depending on the type of price (minimum, maximum, closing), with closing prices showing higher correlation and sensitivity to changes in the NASDAQ Composite index.
